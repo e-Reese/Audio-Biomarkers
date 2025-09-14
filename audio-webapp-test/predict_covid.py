@@ -1,17 +1,61 @@
 import os
+import sys
 import pickle
 import numpy as np
 import librosa
 import torch
 import torchaudio
-from transformers import Wav2Vec2Processor, Wav2Vec2Model
 import argparse
+from transformers import Wav2Vec2Processor, Wav2Vec2Model
 
-def extract_features(audio_path, processor=None, wav2vec2_model=None):
+# Set paths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+MODEL_PATH = os.path.join(MODELS_DIR, "covid_cough_classifier_v1.pkl")
+FEATURE_INFO_PATH = os.path.join(MODELS_DIR, "feature_info.pkl")
+
+def load_model():
+    """Load the trained COVID prediction model"""
+    if not os.path.exists(MODEL_PATH):
+        raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
+    
+    # Load model
+    with open(MODEL_PATH, 'rb') as f:
+        model = pickle.load(f)
+    
+    # Try to load feature info if it exists
+    feature_info = {}
+    if os.path.exists(FEATURE_INFO_PATH):
+        try:
+            with open(FEATURE_INFO_PATH, 'rb') as f:
+                feature_info = pickle.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load feature info: {e}")
+            feature_info = {'feature_type': 'mfcc'}
+    else:
+        feature_info = {'feature_type': 'mfcc'}
+    
+    return model, feature_info
+
+def load_audio_model():
+    """Load a pretrained audio model from Hugging Face"""
+    print("Loading audio model...")
+    try:
+        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+        model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
+        print("Loaded wav2vec2 model successfully")
+        return processor, model
+    except Exception as e:
+        print(f"Error loading wav2vec2 model: {e}")
+        print("Falling back to MFCC features")
+        return None, None
+
+def extract_features(processor, model, audio_path, feature_type='mfcc'):
     """Extract features from audio using wav2vec2 model or MFCC fallback"""
     try:
+        # Load and resample audio
         if os.path.exists(audio_path):
-            if processor is not None and wav2vec2_model is not None:
+            if processor is not None and model is not None and feature_type == 'wav2vec2':
                 # Use wav2vec2 model
                 waveform, sample_rate = torchaudio.load(audio_path)
                 if sample_rate != 16000:
@@ -26,7 +70,7 @@ def extract_features(audio_path, processor=None, wav2vec2_model=None):
                 # Process audio with wav2vec2 model
                 inputs = processor(waveform.squeeze().numpy(), sampling_rate=sample_rate, return_tensors="pt")
                 with torch.no_grad():
-                    outputs = wav2vec2_model(**inputs)
+                    outputs = model(**inputs)
                 
                 # Extract embeddings
                 embeddings = outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
@@ -55,68 +99,72 @@ def extract_features(audio_path, processor=None, wav2vec2_model=None):
         print(f"Error processing {audio_path}: {e}")
         return None
 
-def main():
-    parser = argparse.ArgumentParser(description="Run COVID cough classifier on an audio file")
-    parser.add_argument("audio_file", help="Path to the audio file to analyze")
-    parser.add_argument("--model", default="covid_cough_classifier_v1.pkl", 
-                        help="Name of the classifier model file in the models directory")
-    args = parser.parse_args()
+def predict_covid(audio_path):
+    """Predict COVID status from cough audio"""
+    # Load the trained model
+    model, feature_info = load_model()
     
-    # Set paths
-    MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
-    MODEL_PATH = os.path.join(MODEL_DIR, args.model)
+    # Get feature type
+    feature_type = feature_info.get('feature_type', 'mfcc')
+    print(f"Using feature type: {feature_type}")
     
-    # Check if model exists
-    if not os.path.exists(MODEL_PATH):
-        print(f"Error: Model file not found at {MODEL_PATH}")
-        return
-    
-    # Check if audio file exists
-    if not os.path.exists(args.audio_file):
-        print(f"Error: Audio file not found at {args.audio_file}")
-        return
-    
-    # Load model
-    print(f"Loading classifier model from {MODEL_PATH}...")
-    try:
-        with open(MODEL_PATH, 'rb') as f:
-            model = pickle.load(f)
-        print("Model loaded successfully")
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        return
-    
-    # Initialize audio processor
-    try:
-        print("Loading wav2vec2 model...")
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-        wav2vec2_model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
-        print("Loaded wav2vec2 model successfully")
-    except Exception as e:
-        print(f"Error loading wav2vec2 model: {e}")
-        print("Falling back to MFCC features")
-        processor = None
-        wav2vec2_model = None
+    # Load audio model if needed
+    processor, audio_model = load_audio_model()
     
     # Extract features
-    print(f"Extracting features from {args.audio_file}...")
-    features = extract_features(args.audio_file, processor, wav2vec2_model)
+    features = extract_features(processor, audio_model, audio_path, feature_type)
     
     if features is None:
-        print("Failed to extract features from audio")
-        return
+        print(f"Failed to extract features from {audio_path}")
+        return None
+    
+    # Check feature shape
+    expected_shape = feature_info.get('input_shape', None)
+    if expected_shape and features.shape != expected_shape:
+        print(f"Warning: Feature shape mismatch. Expected {expected_shape}, got {features.shape}")
+        
+        # Try to reshape or pad if possible
+        if len(features) > expected_shape[0]:
+            print(f"Truncating features from {len(features)} to {expected_shape[0]}")
+            features = features[:expected_shape[0]]
+        elif len(features) < expected_shape[0]:
+            print(f"Padding features from {len(features)} to {expected_shape[0]}")
+            padding = np.zeros(expected_shape[0] - len(features))
+            features = np.concatenate([features, padding])
     
     # Make prediction
-    print("Making prediction...")
     features = features.reshape(1, -1)  # Reshape for single sample prediction
-    prediction = int(model.predict(features)[0])
-    probabilities = model.predict_proba(features)[0]
+    try:
+        prediction = int(model.predict(features)[0])
+        probabilities = model.predict_proba(features)[0]
+        
+        # Format the result as a string
+        result = f"COVID Prediction: {'Positive' if prediction == 1 else 'Negative'} "
+        result += f"(Confidence: {max(probabilities):.2f})"
+        
+        return result
+    except Exception as e:
+        print(f"Error during prediction: {e}")
+        return None
+
+def main(audio_path=None):
+    parser = argparse.ArgumentParser(description="Run COVID cough classifier on an audio file")
+    if audio_path is None:
+        parser.add_argument("--audio", default=os.path.join(MODELS_DIR, "test_cough.wav"), 
+                          help="Path to cough audio file")
+        args = parser.parse_args()
+        audio_path = args.audio
     
-    # Display results
-    print("\n===== Prediction Results =====")
-    print(f"Prediction: {'COVID-19 Positive' if prediction == 1 else 'Healthy'} (class {prediction})")
-    print(f"Probability of healthy: {probabilities[0]:.4f}")
-    print(f"Probability of COVID-19 positive: {probabilities[1]:.4f}")
+    print(f"Predicting COVID status from {audio_path}")
+    
+    result = predict_covid(audio_path)
+    
+    if result is not None:
+        print(result)
+        return result
+    else:
+        print("Failed to predict COVID status")
+        return "Error: COVID prediction failed"
 
 if __name__ == "__main__":
     main()

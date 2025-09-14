@@ -36,14 +36,30 @@ def load_model():
 def evaluate_audio(audio_path):
     """
     Process audio file and return prediction
-    Replace this with your actual audio processing and model prediction logic
     """
     try:
-        # covid_result = predict_covid.main(audio_path)
-        result = predict_age.predict_age(audio_path)
-
+        print(f"Processing audio file: {audio_path}")
+        
+        # Get COVID prediction
+        covid_result = predict_covid.predict_covid(audio_path)
+        if covid_result is None:
+            print("COVID prediction returned None")
+            covid_result = "COVID prediction: Error"
+        
+        # Get age prediction
+        age_result = predict_age.predict_age(audio_path)
+        if age_result is None:
+            print("Age prediction returned None")
+            age_result = "Age prediction: Error"
+        
+        # Combine results
+        result = f"{covid_result} | Age: {age_result} years"
+        print(f"Prediction result: {result}")
         return result
     except Exception as e:
+        import traceback
+        print(f"Error processing audio: {str(e)}")
+        print(traceback.format_exc())
         return f"Error processing audio: {str(e)}"
 
 @app.route('/')
