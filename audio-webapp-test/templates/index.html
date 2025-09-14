@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Biomarker Analysis</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 2rem;
+            background-color: #f8f9fa;
+        }
+        .recording-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 2rem;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .btn-record {
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+        .btn-record.recording {
+            background-color: #dc3545;
+            border-color: #dc3545;
+        }
+        .timer {
+            font-size: 1.5rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            font-weight: bold;
+        }
+        .result-container {
+            margin-top: 2rem;
+            padding: 1rem;
+            border-radius: 5px;
+            background-color: #f8f9fa;
+        }
+        .audio-controls {
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+        .spinner-border {
+            display: inline-block;
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="recording-container">
+            <h1 class="text-center mb-4">Audio Biomarker Analysis</h1>
+            
+            <div class="timer" id="timer">00:00</div>
+            
+            <button id="recordButton" class="btn btn-primary btn-lg btn-record">
+                Start Recording
+            </button>
+            
+            <div id="audioContainer" class="d-none">
+                <audio id="audioPlayback" controls class="audio-controls"></audio>
+                
+                <div class="d-grid gap-2">
+                    <button id="sendButton" class="btn btn-success btn-lg">Analyze Audio</button>
+                </div>
+            </div>
+            
+            <div id="loadingContainer" class="d-none text-center mt-3">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <span>Analyzing audio...</span>
+            </div>
+            
+            <div id="resultContainer" class="result-container d-none">
+                <h4>Analysis Result:</h4>
+                <p id="resultText" class="lead"></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/recorder.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
