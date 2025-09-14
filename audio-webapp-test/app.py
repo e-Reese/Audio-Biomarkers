@@ -53,7 +53,7 @@ def evaluate_audio(audio_path):
             age_result = "Age prediction: Error"
         
         # Combine results
-        result = f"{covid_result} | Age: {age_result} years"
+        result = f"{covid_result} | Age Prediction: {age_result} years"
         print(f"Prediction result: {result}")
         return result
     except Exception as e:

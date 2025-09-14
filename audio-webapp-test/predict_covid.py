@@ -139,7 +139,7 @@ def predict_covid(audio_path):
         probabilities = model.predict_proba(features)[0]
         
         # Format the result as a string
-        result = f"COVID Prediction: {'Positive' if prediction == 1 else 'Negative'} "
+        result = f"COVID: {'Positive' if prediction == 1 else 'Negative'} "
         result += f"(Confidence: {max(probabilities):.2f})"
         
         return result
