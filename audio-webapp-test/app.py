@@ -3,8 +3,12 @@ from flask import Flask, request, jsonify, render_template
 import pickle
 import numpy as np
 from werkzeug.utils import secure_filename
+from flask_cors import CORS
+import predict_covid
+import predict_age
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # Configure upload folder
 UPLOAD_FOLDER = 'uploads'
@@ -35,17 +39,9 @@ def evaluate_audio(audio_path):
     Replace this with your actual audio processing and model prediction logic
     """
     try:
-        model = load_model()
-        if model is None:
-            return "Error: Model could not be loaded"
-        
-        # Here you would typically:
-        # 1. Load and preprocess the audio file
-        # 2. Extract features
-        # 3. Make prediction using the model
-        
-        # Placeholder for actual model prediction
-        result = "asdfasdfasdfas"
+        # covid_result = predict_covid.main(audio_path)
+        result = predict_age.predict_age(audio_path)
+
         return result
     except Exception as e:
         return f"Error processing audio: {str(e)}"
@@ -63,7 +59,13 @@ def evaluate():
     if audio_file.filename == '':
         return jsonify({'error': 'No audio file selected'}), 400
     
-    if audio_file:
+    # Check file extension
+    allowed_extensions = {'mp3', 'wav', 'ogg', 'flac', 'm4a'}
+    if '.' not in audio_file.filename or \
+       audio_file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+        return jsonify({'error': 'Invalid audio file format. Allowed formats: mp3, wav, ogg, flac, m4a'}), 400
+    
+    try:
         filename = secure_filename(audio_file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         audio_file.save(filepath)
@@ -71,7 +73,14 @@ def evaluate():
         # Process the audio file
         result = evaluate_audio(filepath)
         
+        # Check if result is an error message
+        if isinstance(result, str) and result.startswith("Error"):
+            return jsonify({'error': result}), 500
+        
         return jsonify({'result': result})
+    except Exception as e:
+        print(f"Exception in evaluate route: {str(e)}")
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # Create uploads directory if it doesn't exist
@@ -83,4 +92,4 @@ if __name__ == '__main__':
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
     
-    app.run(debug=True)
+    app.run(debug=True, port=5001)
